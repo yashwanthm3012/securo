@@ -1,4 +1,4 @@
-name: securo
+#name: securo
 
 # podman-compose groups all services into a single pod by default, which
 # interferes with per-service port mapping and networking. Disabling it makes
@@ -125,18 +125,18 @@ services:
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port
       8000 --reload"
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_PORT:-8001}:8000"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     ports:
-      - "${FRONTEND_PORT:-3000}:5173"
+      - "${FRONTEND_PORT:-3001}:5173"
     environment:
       BACKEND_URL: http://backend:8000
       # Also drives Vite's allowedHosts, so a proxied domain is not blocked.
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${FRONTEND_PORT:-3000}}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${FRONTEND_PORT:-3001}}
       APP_VERSION_ROOT: /workspace
     depends_on:
       - backend
