@@ -100,8 +100,10 @@ async def _asset_value_at(
         val = val_result.scalar_one_or_none()
         if val is not None:
             amount = float(val)
-        elif asset.purchase_price is not None and (
-            asset.purchase_date is None or asset.purchase_date <= cutoff
+        elif (
+            asset.source != "kite"
+            and asset.purchase_price is not None
+            and (asset.purchase_date is None or asset.purchase_date <= cutoff)
         ):
             amount = float(asset.purchase_price)
         else:
@@ -179,8 +181,10 @@ async def _net_worth_at(
         val = val_result.scalar_one_or_none()
         if val is not None:
             amount = float(val)
-        elif asset.purchase_price is not None and (
-            asset.purchase_date is None or asset.purchase_date <= cutoff
+        elif (
+            asset.source != "kite"
+            and asset.purchase_price is not None
+            and (asset.purchase_date is None or asset.purchase_date <= cutoff)
         ):
             amount = float(asset.purchase_price)
         else:
