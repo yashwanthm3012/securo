@@ -41,6 +41,14 @@ KNOWN_PROVIDERS = [
         "requires_institution_select": False,
         "supports_asset_sync": True,
     },
+    {
+        "name": "kite",
+        "display_name": "Zerodha Kite",
+        "description": "Zerodha investment holdings via Kite Connect",
+        "flow_type": "oauth",
+        "requires_institution_select": False,
+        "supports_asset_sync": True,
+    },
 ]
 
 
@@ -94,6 +102,10 @@ def _auto_register_providers() -> None:
         from app.providers.simplefin import SimpleFinProvider
         register_provider("simplefin", SimpleFinProvider)
 
+    if settings.kite_api_key and settings.kite_api_secret:
+        from app.providers.kite import KiteProvider
+
+        register_provider("kite", KiteProvider)
 
 _auto_register_providers()
 
