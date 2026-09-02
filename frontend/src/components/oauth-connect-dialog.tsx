@@ -24,6 +24,7 @@ interface OAuthConnectDialogProps {
   onClose: () => void
   provider: string
   supportsAssetSync?: boolean
+  requiresInstitutionSelect?: boolean
 }
 
 const LAST_COUNTRY_KEY = 'securo:lastOAuthCountry'
@@ -41,8 +42,15 @@ function countryLabel(code: string): string {
   return REGION_NAMES.of(code) || code
 }
 
-export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync = false }: OAuthConnectDialogProps) {
+export function OAuthConnectDialog({
+  open,
+  onClose,
+  provider,
+  supportsAssetSync = false,
+  requiresInstitutionSelect = true,
+}: OAuthConnectDialogProps) {
   const { t } = useTranslation()
+
   const [step, setStep] = useState<'country' | 'bank'>('country')
   const [country, setCountry] = useState<string | null>(null)
   const [countries, setCountries] = useState<string[]>([])
@@ -52,21 +60,67 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
   const [redirecting, setRedirecting] = useState(false)
   const [syncAssets, setSyncAssets] = useState(true)
 
-  // Reset when dialog opens.
+  /**
+   * Direct OAuth flow.
+   *
+   * Providers such as Zerodha Kite do not have an institution
+   * selection step. For those providers we directly request the
+   * OAuth URL from the backend and redirect the browser there.
+   */
+  const handleDirectConnect = async () => {
+    setRedirecting(true)
+
+    try {
+      const url = await connections.getOAuthUrl(
+        provider,
+        supportsAssetSync
+          ? { sync_assets: syncAssets }
+          : {},
+      )
+
+      window.location.assign(url)
+    } catch (e) {
+      setRedirecting(false)
+
+      const message = e instanceof Error ? e.message : String(e)
+      toast.error(message || t('accounts.connectError'))
+    }
+  }
+
+  /**
+   * Reset state whenever the dialog opens.
+   *
+   * Providers that require institution selection continue to use:
+   *
+   *   country -> bank -> OAuth
+   *
+   * Direct OAuth providers skip institution loading completely.
+   */
   useEffect(() => {
     if (!open) return
+
     setStep('country')
     setCountry(null)
+    setCountries([])
     setInstitutions([])
     setError(null)
     setRedirecting(false)
     setSyncAssets(true)
+
+    if (!requiresInstitutionSelect) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
+
     connections
       .listInstitutions(provider)
       .then((data) => {
         setCountries(data.countries)
+
         const stored = localStorage.getItem(LAST_COUNTRY_KEY)
+
         if (stored && data.countries.includes(stored)) {
           setCountry(stored)
           setStep('bank')
@@ -74,19 +128,35 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
       })
       .catch(() => setError(t('accounts.loadingInstitutionsError')))
       .finally(() => setLoading(false))
-  }, [open, provider, t])
+  }, [open, provider, requiresInstitutionSelect, t])
 
-  // Load banks when a country is picked.
+  /**
+   * Load banks when a country is selected.
+   *
+   * This is only used for providers that require institution
+   * selection. Direct OAuth providers never reach this request.
+   */
   useEffect(() => {
-    if (!open || !country || step !== 'bank') return
+    if (!open || !country || step !== 'bank' || !requiresInstitutionSelect) {
+      return
+    }
+
     setLoading(true)
     setError(null)
+
     connections
       .listInstitutions(provider, country)
       .then((data) => setInstitutions(data.institutions))
       .catch(() => setError(t('accounts.loadingInstitutionsError')))
       .finally(() => setLoading(false))
-  }, [open, provider, country, step, t])
+  }, [
+    open,
+    provider,
+    country,
+    step,
+    requiresInstitutionSelect,
+    t,
+  ])
 
   const sortedCountries = useMemo(
     () =>
@@ -104,7 +174,9 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
 
   const handleBankSelect = async (institution: Institution) => {
     if (!country) return
+
     setRedirecting(true)
+
     try {
       const url = await connections.getOAuthUrl(provider, {
         country,
@@ -112,20 +184,25 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
         valid_until_days: institution.max_consent_days,
         ...(supportsAssetSync ? { sync_assets: syncAssets } : {}),
       })
+
       window.location.assign(url)
     } catch (e) {
       setRedirecting(false)
+
       const message = e instanceof Error ? e.message : String(e)
       toast.error(message || t('accounts.connectError'))
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && !redirecting && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => !v && !redirecting && onClose()}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {step === 'bank' && (
+            {requiresInstitutionSelect && step === 'bank' && (
               <button
                 onClick={() => setStep('country')}
                 className="text-muted-foreground hover:text-foreground"
@@ -134,23 +211,38 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
                 <ChevronLeft size={18} />
               </button>
             )}
-            {step === 'country' ? t('accounts.selectCountry') : t('accounts.selectBank')}
+
+            {requiresInstitutionSelect
+              ? step === 'country'
+                ? t('accounts.selectCountry')
+                : t('accounts.selectBank')
+              : t('connections.syncAssets')}
           </DialogTitle>
+
           <p className="text-sm text-muted-foreground">
-            {step === 'country'
-              ? t('accounts.selectCountryDesc')
-              : t('accounts.selectBankDesc')}
+            {requiresInstitutionSelect
+              ? step === 'country'
+                ? t('accounts.selectCountryDesc')
+                : t('accounts.selectBankDesc')
+              : t('connections.syncAssetsHint')}
           </p>
         </DialogHeader>
 
         {!redirecting && supportsAssetSync && (
           <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
             <div className="space-y-1">
-              <label htmlFor="oauth-sync-assets" className="text-sm font-medium text-foreground">
+              <label
+                htmlFor="oauth-sync-assets"
+                className="text-sm font-medium text-foreground"
+              >
                 {t('connections.syncAssets')}
               </label>
-              <p className="text-xs text-muted-foreground">{t('connections.syncAssetsHint')}</p>
+
+              <p className="text-xs text-muted-foreground">
+                {t('connections.syncAssetsHint')}
+              </p>
             </div>
+
             <input
               id="oauth-sync-assets"
               type="checkbox"
@@ -164,14 +256,38 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
         {redirecting ? (
           <div className="py-12 flex flex-col items-center gap-3">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <p className="text-sm text-muted-foreground">{t('accounts.redirecting')}</p>
+
+            <p className="text-sm text-muted-foreground">
+              {t('accounts.redirecting')}
+            </p>
           </div>
         ) : loading ? (
           <div className="flex justify-center py-8">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : error ? (
-          <div className="py-8 text-center text-sm text-destructive">{error}</div>
+          <div className="py-8 text-center text-sm text-destructive">
+            {error}
+          </div>
+        ) : !requiresInstitutionSelect ? (
+          /*
+           * Direct OAuth provider.
+           *
+           * Zerodha Kite comes here because:
+           *
+           * requires_institution_select = false
+           *
+           * There is no country/bank selection. We simply start
+           * the provider OAuth flow.
+           */
+          <div className="pt-4">
+            <Button
+              className="w-full"
+              onClick={handleDirectConnect}
+            >
+              {t('connections.continueToConnector')}
+            </Button>
+          </div>
         ) : step === 'country' ? (
           <div className="space-y-1 pt-2 max-h-[60vh] overflow-y-auto">
             {sortedCountries.length === 0 ? (
@@ -186,11 +302,20 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
                   className="w-full flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary hover:bg-muted/50"
                 >
                   <div className="w-8 h-8 rounded-md bg-muted flex items-center justify-center shrink-0">
-                    <Globe size={14} className="text-muted-foreground" />
+                    <Globe
+                      size={14}
+                      className="text-muted-foreground"
+                    />
                   </div>
+
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">{countryLabel(code)}</p>
-                    <p className="text-xs text-muted-foreground">{code}</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {countryLabel(code)}
+                    </p>
+
+                    <p className="text-xs text-muted-foreground">
+                      {code}
+                    </p>
                   </div>
                 </button>
               ))
@@ -216,13 +341,18 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
                         alt=""
                         className="w-full h-full object-contain"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
+                          (e.target as HTMLImageElement).style.display =
+                            'none'
                         }}
                       />
                     ) : (
-                      <Building2 size={14} className="text-muted-foreground" />
+                      <Building2
+                        size={14}
+                        className="text-muted-foreground"
+                      />
                     )}
                   </div>
+
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground truncate">
                       {inst.display_name}
@@ -231,8 +361,13 @@ export function OAuthConnectDialog({ open, onClose, provider, supportsAssetSync 
                 </button>
               ))
             )}
+
             <div className="pt-2">
-              <Button variant="ghost" size="sm" onClick={() => setStep('country')}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setStep('country')}
+              >
                 <ChevronLeft size={14} className="mr-1" />
                 {t('accounts.back')}
               </Button>

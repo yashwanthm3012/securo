@@ -20,7 +20,7 @@ export default function OAuthCallbackPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const code = params.get('code')
+  const code = params.get('code') || params.get('request_token')
   const state = params.get('state')
   const errorParam = params.get('error')
   const errorDescription = params.get('error_description')
