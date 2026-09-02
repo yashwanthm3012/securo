@@ -172,6 +172,24 @@ class HoldingData:
     account_external_id: Optional[str] = None
     account_name: Optional[str] = None
 
+@dataclass
+class AssetTransactionData:
+    """A normalized investment buy/sell execution.
+
+    This is intentionally separate from TransactionData because an investment
+    trade is an asset-ledger event, not a bank-account transaction.
+    """
+
+    external_id: str
+    asset_external_id: str
+    kind: str  # buy | sell
+    quantity: Decimal
+    price: Decimal
+    date: date
+    fee: Decimal = Decimal("0")
+    notes: Optional[str] = None
+    metadata: Optional[dict] = None
+
 
 @dataclass
 class InstitutionData:
@@ -392,3 +410,14 @@ class BankProvider(ABC):
         (see app.services.credit_card_service).
         """
         return []
+
+        async def get_asset_transactions(
+        self,
+        credentials: dict,
+    ) -> list[AssetTransactionData]:
+            """Fetch investment buy/sell executions.
+
+            Providers that don't expose investment trades can use the default
+            empty implementation.
+            """
+            return []
