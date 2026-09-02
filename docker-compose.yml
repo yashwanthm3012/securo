@@ -72,6 +72,11 @@ x-backend-env: &backend-env
   AGENTS_EMBEDDING_PROVIDER: ${AGENTS_EMBEDDING_PROVIDER:-native}
   AGENTS_EMBEDDING_MODEL: ${AGENTS_EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2}
 
+  #Kite Connect
+  KITE_API_KEY: ${KITE_API_KEY:-}
+  KITE_API_SECRET: ${KITE_API_SECRET:-}
+  KITE_OAUTH_REDIRECT_URI: ${KITE_OAUTH_REDIRECT_URI:-http://localhost:3001/oauth/callback}
+
 x-backend-base: &backend-base
   build: ./backend
   environment: *backend-env
