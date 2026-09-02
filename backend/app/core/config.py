@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     simplefin_enabled: bool = False
     simplefin_api_url: str = "https://beta-bridge.simplefin.org"
 
+    # Zerodha Kite Connect
+    kite_api_key: str = ""
+    kite_api_secret: SecretStr = SecretStr("")
+    kite_oauth_redirect_uri: str = ""
+
     # Frontend
     frontend_url: str = "http://localhost:5173"
 
