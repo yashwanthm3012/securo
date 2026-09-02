@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.models.asset import Asset
 from app.models.asset_group import AssetGroup
 from app.models.asset_value import AssetValue
+from app.models.asset_transaction import AssetTransaction
 from app.models.bank_connection import BankConnection
 from app.models.account import Account
 from app.models.category import Category
@@ -682,12 +683,39 @@ async def _upsert_asset_from_holding(
 ) -> Asset:
     """Create or update an Asset from a HoldingData payload.
 
-    Synced fields (name, currency, quantity, purchase_price, maturity,
-    metadata) are always overwritten — the UI disables editing these on
-    synced assets. Provider-reported withdrawal is handled by the caller
-    via `sell_date`, not here, so this function only ever sees ACTIVE
-    holdings and never flips `is_archived` on its own.
+    Provider-synced holdings keep their provider-reported quantity,
+    cost basis, average price and latest market price. Provider-specific
+    information remains in external_metadata.
     """
+
+    now = datetime.now(timezone.utc)
+
+    # Provider average price takes precedence when explicitly supplied
+    # in metadata. This is useful for Kite, whose API gives us both
+    # average_price and last_price separately.
+    provider_average_price = None
+
+    if holding.metadata:
+        raw_average = holding.metadata.get("average_price")
+
+        if raw_average is not None:
+            try:
+                provider_average_price = Decimal(str(raw_average))
+            except (ValueError, TypeError):
+                provider_average_price = None
+
+    # Generic fallback:
+    # total purchase price / quantity = average price.
+    if (
+        provider_average_price is None
+        and holding.purchase_price is not None
+        and holding.quantity is not None
+        and holding.quantity > 0
+    ):
+        provider_average_price = (
+            holding.purchase_price / holding.quantity
+        )
+
     if asset is None:
         asset = Asset(
             user_id=user_id,
@@ -706,46 +734,67 @@ async def _upsert_asset_from_holding(
             maturity_date=holding.maturity_date,
             external_metadata=holding.metadata,
             valuation_method="manual",
+
+            # Provider-reported pricing.
+            average_price=provider_average_price,
+            last_price=holding.unit_price,
+            last_price_at=(
+                now if holding.unit_price is not None else None
+            ),
         )
+
         session.add(asset)
         await session.flush()
         return asset
 
-    # Fields Pluggy consistently returns — safe to overwrite each sync.
     asset.name = holding.name
     asset.currency = holding.currency
     asset.user_id = user_id
-    # external_metadata is a snapshot blob: we want the latest every time.
+
+    # Latest provider snapshot.
     asset.external_metadata = holding.metadata
-    previous_connection_id = asset.connection_id
     asset.connection_id = connection_id
-    # Only auto-unarchive when the holding moved to a different connection
-    # (e.g. unlink + reconnect). This avoids overriding user-archived assets.
+
+    # Only auto-unarchive when the holding moved to a different
+    # connection, preserving explicit user archiving otherwise.
+    previous_connection_id = asset.connection_id
+
     if asset.is_archived and previous_connection_id != connection_id:
         asset.is_archived = False
-    # Re-adopted across workspaces (bank deleted in one, re-added in the
-    # other): the asset follows its connection; its old wallet stays behind
-    # in the old workspace, so placement is redone by the caller.
+
     if asset.workspace_id != workspace_id:
         asset.workspace_id = workspace_id
         asset.group_id = None
 
-    # Sparse fields — merge, don't clobber. Pluggy sometimes returns
-    # these on first sync and null on later ones (e.g. amountOriginal
-    # present at creation, missing on daily rebalances). Keeping the
-    # first-seen value is better than wiping data we already have.
+    # Quantity.
     if holding.quantity is not None:
         asset.units = holding.quantity
+
+    # Total cost basis.
     if holding.purchase_price is not None:
         asset.purchase_price = holding.purchase_price
+
+    # Average acquisition price.
+    if provider_average_price is not None:
+        asset.average_price = provider_average_price
+
+    # Latest market price.
+    if holding.unit_price is not None:
+        asset.last_price = holding.unit_price
+        asset.last_price_at = now
+
     if holding.purchase_date:
         asset.purchase_date = holding.purchase_date
+
     if holding.isin:
         asset.isin = holding.isin
+
     if holding.ticker:
         asset.ticker = holding.ticker
+
     if holding.maturity_date:
         asset.maturity_date = holding.maturity_date
+
     return asset
 
 
@@ -1194,6 +1243,7 @@ async def handle_oauth_callback(
     # available on the Assets page immediately after the widget closes.
     if _sync_assets_enabled(connection.settings):
         await _sync_holdings(session, user_id, connection, connection_data.credentials)
+        await _sync_asset_transactions(session, user_id, connection, connection_data.credentials)
 
     connection.last_sync_at = datetime.now(timezone.utc)
     await session.commit()
@@ -1623,6 +1673,142 @@ async def _sync_credit_card_bills(
             )
 
     return by_external_id
+
+async def _sync_asset_transactions(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    connection: BankConnection,
+    credentials: dict,
+) -> int:
+    """Import provider investment trades into AssetTransaction.
+
+    This is intentionally additive.
+
+    The provider's holdings endpoint remains the source of truth for the
+    current position because Kite's trade endpoint only exposes today's
+    executions. We therefore do NOT call recompute_and_cache() here.
+
+    Once a complete historical tradebook is available, the ledger can become
+    the source of truth for the position.
+    """
+
+    try:
+        provider = get_provider(connection.provider)
+        transactions = await provider.get_asset_transactions(credentials)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "Failed to fetch asset transactions for connection %s",
+            connection.id,
+        )
+        return 0
+
+    if not transactions:
+        return 0
+
+    imported = 0
+
+    # Batch-load the assets belonging to this connection.
+    assets_result = await session.execute(
+        select(Asset).where(
+            Asset.connection_id == connection.id,
+            Asset.workspace_id == connection.workspace_id,
+        )
+    )
+
+    assets = list(assets_result.scalars().all())
+
+    assets_by_external_id = {
+        asset.external_id: asset
+        for asset in assets
+        if asset.external_id
+    }
+
+    for txn_data in transactions:
+        if not txn_data.external_id:
+            continue
+
+        asset = assets_by_external_id.get(
+            txn_data.asset_external_id
+        )
+
+        # Fallback matching by ticker + exchange.
+        # This protects us if the instrument token representation changes.
+        if asset is None:
+            exchange = (
+                (txn_data.metadata or {}).get("exchange")
+                or ""
+            ).upper()
+
+            symbol = (
+                (txn_data.metadata or {}).get("tradingsymbol")
+                or ""
+            ).upper()
+
+            if symbol:
+                asset_result = await session.execute(
+                    select(Asset).where(
+                        Asset.connection_id == connection.id,
+                        Asset.workspace_id == connection.workspace_id,
+                        Asset.ticker == symbol,
+                        Asset.ticker_exchange == exchange,
+                    ).limit(1)
+                )
+                asset = asset_result.scalar_one_or_none()
+
+        if asset is None:
+            logger.warning(
+                "Skipping Kite asset transaction %s: "
+                "matching asset %s not found",
+                txn_data.external_id,
+                txn_data.asset_external_id,
+            )
+            continue
+
+        # Stable duplicate protection.
+        existing_result = await session.execute(
+            select(AssetTransaction).where(
+                AssetTransaction.workspace_id
+                == connection.workspace_id,
+                AssetTransaction.source
+                == connection.provider,
+                AssetTransaction.external_id
+                == txn_data.external_id,
+            ).limit(1)
+        )
+
+        existing = existing_result.scalar_one_or_none()
+
+        if existing is not None:
+            # Trade IDs are immutable. We don't create another row.
+            # Refresh mutable metadata in case Kite adds information later.
+            existing.asset_id = asset.id
+            existing.kind = txn_data.kind
+            existing.quantity = txn_data.quantity
+            existing.price = txn_data.price
+            existing.fee = txn_data.fee
+            existing.date = txn_data.date
+            existing.notes = txn_data.notes
+            continue
+
+        transaction = AssetTransaction(
+            asset_id=asset.id,
+            workspace_id=connection.workspace_id,
+            kind=txn_data.kind,
+            quantity=txn_data.quantity,
+            price=txn_data.price,
+            fee=txn_data.fee,
+            date=txn_data.date,
+            source=connection.provider,
+            external_id=txn_data.external_id,
+            notes=txn_data.notes,
+        )
+
+        session.add(transaction)
+        imported += 1
+
+    await session.flush()
+
+    return imported
 
 
 async def sync_connection(
@@ -2089,6 +2275,7 @@ async def sync_connection(
         # /investments shouldn't block the transaction sync that just succeeded.
         if _sync_assets_enabled(conn_settings):
             await _sync_holdings(session, user_id, connection, credentials)
+            await _sync_asset_transactions(session, user_id, connection, credentials)
 
         # Reap institution rows referenced by nothing. Id-carrying servers
         # never orphan a row (renames update in place), but a name-only
