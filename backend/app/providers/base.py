@@ -411,13 +411,13 @@ class BankProvider(ABC):
         """
         return []
 
-        async def get_asset_transactions(
+    async def get_asset_transactions(
         self,
         credentials: dict,
     ) -> list[AssetTransactionData]:
-            """Fetch investment buy/sell executions.
+        """Fetch investment buy/sell executions.
 
-            Providers that don't expose investment trades can use the default
-            empty implementation.
-            """
-            return []
+        Providers that don't expose investment trades can use the default
+        empty implementation.
+        """
+        return []

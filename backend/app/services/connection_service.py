@@ -753,11 +753,13 @@ async def _upsert_asset_from_holding(
 
     # Latest provider snapshot.
     asset.external_metadata = holding.metadata
-    asset.connection_id = connection_id
+    
 
     # Only auto-unarchive when the holding moved to a different
     # connection, preserving explicit user archiving otherwise.
+    # changed order
     previous_connection_id = asset.connection_id
+    asset.connection_id = connection_id
 
     if asset.is_archived and previous_connection_id != connection_id:
         asset.is_archived = False
