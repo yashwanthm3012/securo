@@ -304,6 +304,20 @@ export default function AssetsPage() {
     (acc: number, a: { current_value?: number | null }) => acc + Number(a.current_value || 0),
     0,
   )
+
+  const totalInvested = (assetsList ?? []).reduce(
+    (acc, a) => acc + Number(a.total_invested ?? 0),
+    0,
+  )
+
+  const totalGainLoss = (assetsList ?? []).reduce(
+    (acc, a) => acc + Number(a.gain_loss ?? 0),
+    0,
+  )
+
+  const totalGainLossPct =
+    totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : null
+  
   // Portfolio total in the user's primary currency — denominator for the
   // "% da carteira" column in the holdings table.
   const portfolioTotalPrimary = (assetsList ?? []).reduce(
@@ -1077,6 +1091,47 @@ export default function AssetsPage() {
           mask={mask}
         />
       )}
+
+      {/* Portfolio Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-xs text-muted-foreground">Invested</p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
+            {mask(formatCurrency(totalInvested, userCurrency, locale))}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Quantity × average price
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-xs text-muted-foreground">Current Value</p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
+            {mask(formatCurrency(totalValue, userCurrency, locale))}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Current market value
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <p className="text-xs text-muted-foreground">Unrealized Gain/Loss</p>
+          <p className={`mt-1 text-lg font-bold tabular-nums ${
+            totalGainLoss >= 0 ? 'text-emerald-600' : 'text-rose-500'
+          }`}>
+            {totalGainLoss >= 0 ? '+' : ''}
+            {mask(formatCurrency(totalGainLoss, userCurrency, locale))}
+          </p>
+          {totalGainLossPct != null && (
+            <p className={`mt-1 text-[11px] ${
+              totalGainLoss >= 0 ? 'text-emerald-600' : 'text-rose-500'
+            }`}>
+              {totalGainLossPct >= 0 ? '+' : ''}
+              {totalGainLossPct.toFixed(2)}%
+            </p>
+          )}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
