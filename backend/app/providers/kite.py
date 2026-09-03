@@ -181,11 +181,13 @@ class KiteProvider(BankProvider):
             "api_key": api_key,
         }
 
+        cash_balance = await self._cash_balance(credentials)
+
         account = AccountData(
             external_id=f"kite:{user_id}",
             name=f"Zerodha ({user_id})",
             type="investment",
-            balance=Decimal("0"),
+            balance=cash_balance,
             currency="INR",
         )
 
@@ -233,18 +235,47 @@ class KiteProvider(BankProvider):
 
         return payload.get("data") or []
 
+    #Returns the available cash balance from Zerodha.
+    #todo: This function should be renamed to something like _available_equity_margin() to be more accurate.
+    async def _cash_balance(self, credentials: dict) -> Decimal:
+        """Return Zerodha's available equity margin (cash + collateral)."""
+        data = await self._request(
+            "/user/margins/equity",
+            credentials,
+        )
+
+        #print(f"KITE MARGIN RESPONSE: {data}")
+
+        if not isinstance(data, dict):
+            return Decimal("0")
+
+        available = data.get("available") or {}
+
+        try:
+            cash = Decimal(str(available.get("live_balance") or 0))
+
+            return cash
+
+        except (ValueError, TypeError, InvalidOperation):
+            return Decimal("0")
+
     async def get_accounts(
         self,
         credentials: dict,
     ) -> list[AccountData]:
+        #print("KITE GET_ACCOUNTS CALLED")
+
         user_id = credentials.get("user_id") or "ZERODHA"
+        cash_balance = await self._cash_balance(credentials)
+
+        #print(f"KITE CASH BALANCE: {cash_balance}")
 
         return [
             AccountData(
                 external_id=f"kite:{user_id}",
                 name=f"Zerodha ({user_id})",
                 type="investment",
-                balance=Decimal("0"),
+                balance=cash_balance,
                 currency="INR",
             )
         ]
