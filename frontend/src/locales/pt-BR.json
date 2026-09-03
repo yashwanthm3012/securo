@@ -1074,7 +1074,9 @@
     "frequency": "Frequência",
     "monthly": "Mensal",
     "quarterly": "Trimestral",
+    "semiannual": "A cada 6 meses",
     "weekly": "Semanal",
+    "biweekly": "A cada 2 semanas",
     "yearly": "Anual",
     "dayOfMonth": "Dia do mês",
     "weekendAdjustment": "Ajuste de fim de semana",
@@ -1104,6 +1106,13 @@
     "confirmDeleteDescription": "A definição recorrente \"{{description}}\" será excluída permanentemente. As transações existentes permanecerão, mas perderão o vínculo recorrente. Esta ação não pode ser desfeita."
   },
   "rules": {
+    "searchPlaceholder": "Buscar regras...",
+    "filterAllCategories": "Todas as categorias",
+    "filterAllStatuses": "Todos os status",
+    "filterActiveOnly": "Somente ativas",
+    "filterInactiveOnly": "Somente inativas",
+    "filterAllActions": "Todas as ações",
+    "noFilterResults": "Nenhuma regra corresponde a estes filtros",
     "preview": "Pré-visualizar",
     "previewMatched": "{{matched}} correspondências",
     "previewSummary": "{{matched}} transações correspondem · {{changed}} seriam alteradas",
@@ -1275,6 +1284,13 @@
     "columnMappingHint": "Associe as colunas do seu CSV aos campos do Securo. Deixe em automático para manter a coluna detectada.",
     "columnAutoDetect": "Detectar automaticamente",
     "mappingNeeded": "Não reconhecemos as colunas do seu CSV automaticamente. Associe-as aos campos do Securo abaixo para continuar.",
+    "failedRowsWarning": "{{count}} linha(s) neste arquivo não puderam ser analisadas e foram ignoradas.",
+    "viewDetails": "Ver detalhes",
+    "failedRowsTitle": "Linhas CSV não analisadas",
+    "failedRowsDesc": "As seguintes linhas no arquivo CSV foram ignoradas porque o formato de data ou valor não pôde ser reconhecido.",
+    "lineNumber": "Linha",
+    "rawValue": "Valor",
+    "errorReason": "Motivo",
     "mapDate": "Coluna de data",
     "mapDescription": "Coluna de descrição",
     "mapAmount": "Coluna de valor",
@@ -1332,7 +1348,13 @@
     "page": "Página {{current}} de {{total}}",
     "mapPayee": "Coluna da pessoa",
     "mapExternalId": "Coluna de ID da transação",
-    "mapNotes": "Coluna de notas"
+    "mapNotes": "Coluna de notas",
+    "description": "Descrição",
+    "errors": {
+      "invalid_date": "Formato de data inválido",
+      "no_amount": "Nenhum valor de entrada ou saída",
+      "invalid_amount": "Formato de valor inválido"
+    }
   },
   "assetImport": {
     "title": "Importar ordens de investimento",

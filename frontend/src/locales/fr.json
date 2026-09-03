@@ -1074,7 +1074,9 @@
     "frequency": "Fréquence",
     "monthly": "Mensuelle",
     "quarterly": "Trimestrielle",
+    "semiannual": "Tous les 6 mois",
     "weekly": "Hebdomadaire",
+    "biweekly": "Toutes les 2 semaines",
     "yearly": "Annuelle",
     "dayOfMonth": "Jour du mois",
     "weekendAdjustment": "Ajustement du week-end",
@@ -1104,6 +1106,13 @@
     "confirmDeleteDescription": "La définition récurrente « {{description}} » sera définitivement supprimée. Les transactions existantes resteront, mais perdront leur lien récurrent. Cette action est irréversible."
   },
   "rules": {
+    "searchPlaceholder": "Rechercher des règles...",
+    "filterAllCategories": "Toutes les catégories",
+    "filterAllStatuses": "Tous les statuts",
+    "filterActiveOnly": "Actives uniquement",
+    "filterInactiveOnly": "Inactives uniquement",
+    "filterAllActions": "Toutes les actions",
+    "noFilterResults": "Aucune règle ne correspond à ces filtres",
     "preview": "Aperçu",
     "previewMatched": "{{matched}} correspondances",
     "previewSummary": "{{matched}} transactions correspondent · {{changed}} seraient modifiées",
@@ -1275,6 +1284,13 @@
     "columnMappingHint": "Faites correspondre vos colonnes CSV aux champs de Securo. Laissez sur détection automatique pour conserver la colonne détectée.",
     "columnAutoDetect": "Détection automatique",
     "mappingNeeded": "Nous n'avons pas pu reconnaître automatiquement vos colonnes CSV. Faites-les correspondre aux champs de Securo ci-dessous pour continuer.",
+    "failedRowsWarning": "{{count}} ligne(s) dans ce fichier n'ont pas pu être analysées et ont été ignorées.",
+    "viewDetails": "Voir les détails",
+    "failedRowsTitle": "Lignes CSV non analysées",
+    "failedRowsDesc": "Les lignes suivantes du fichier CSV ont été ignorées car leur format de date ou de montant n'a pas pu être reconnu.",
+    "lineNumber": "Ligne",
+    "rawValue": "Valeur",
+    "errorReason": "Raison",
     "mapDate": "Colonne de date",
     "mapDescription": "Colonne de description",
     "mapAmount": "Colonne de montant",
@@ -1332,7 +1348,13 @@
     "page": "Page {{current}} sur {{total}}",
     "mapPayee": "Colonne du bénéficiaire",
     "mapExternalId": "Colonne d'ID de transaction",
-    "mapNotes": "Colonne des notes"
+    "mapNotes": "Colonne des notes",
+    "description": "Description",
+    "errors": {
+      "invalid_date": "Format de date invalide",
+      "no_amount": "Aucun montant d'entrée ou de sortie",
+      "invalid_amount": "Format de montant invalide"
+    }
   },
   "assetImport": {
     "title": "Importer des ordres d'investissement",
