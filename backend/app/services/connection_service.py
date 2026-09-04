@@ -527,6 +527,18 @@ async def _sync_holdings(
     existing_by_external: dict[str, Asset] = {
         asset.external_id: asset for asset in existing_assets if asset.external_id
     }
+    # For Kite, ISIN is the stable identity of the security.
+    # The same security can appear under different NSE/BSE
+    # instrument tokens, so external_id alone is not sufficient.
+    existing_by_isin: dict[str, Asset] = {
+        asset.isin.upper(): asset
+        for asset in existing_assets
+        if asset.isin
+        and (
+            asset.connection_id == connection.id
+            or asset.connection_id is None
+        )
+    }
     archive_candidates: dict[str, Asset] = {
         asset.external_id: asset
         for asset in existing_assets
@@ -537,7 +549,29 @@ async def _sync_holdings(
 
     for holding in holdings:
         seen.add(holding.external_id)
+
+        # First try the provider's external ID.
         existing = existing_by_external.get(holding.external_id)
+
+        # Kite external IDs based on exchange/instrument-token can change
+        # when the same security moves between NSE and BSE.
+        # Fall back to the stable ISIN.
+        if (
+            existing is None
+            and source == "kite"
+            and holding.isin
+        ):
+            existing = existing_by_isin.get(holding.isin.upper())
+
+            if existing is not None:
+                # This asset already represents the same security.
+                # Move it to the new stable Kite external ID.
+                old_external_id = existing.external_id
+
+                existing.external_id = holding.external_id
+
+                if old_external_id:
+                    seen.add(old_external_id)
 
         # Provider-reported closure (Pluggy TOTAL_WITHDRAWAL). Two cases:
         #   - New + withdrawn: skip entirely. A dead zero-balance asset
