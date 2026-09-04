@@ -318,8 +318,15 @@ class KiteProvider(BankProvider):
             exchange = item.get("exchange") or ""
             instrument_token = item.get("instrument_token")
             symbol = item.get("tradingsymbol") or ""
+            isin = item.get("isin")
 
-            if instrument_token:
+            # ISIN is the stable identity of the security across NSE/BSE.
+            # Exchange and instrument_token are Kite-specific trading identifiers
+            # and can change when the same security is represented on another exchange.
+            if isin:
+                external_id = f"kite:{exchange}:{isin}"
+            elif instrument_token:
+                # If ISIN is not available, use the exchange and instrument_token as a fallback.
                 external_id = (
                     f"kite:{exchange}:{instrument_token}"
                 )
@@ -337,7 +344,7 @@ class KiteProvider(BankProvider):
                     quantity=quantity,
                     unit_price=last_price,
                     purchase_price=quantity * average_price,
-                    isin=item.get("isin"),
+                    isin=isin,
                     ticker=symbol,
                     metadata={
                         "exchange": exchange,
