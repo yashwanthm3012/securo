@@ -300,6 +300,9 @@ class KiteProvider(BankProvider):
             credentials,
         )
 
+        #mf_data = await self._request("/mf/holdings", credentials)
+        #print("KITE MF HOLDINGS RESPONSE:", mf_data)
+
         result: list[HoldingData] = []
 
         for item in holdings:
@@ -324,7 +327,7 @@ class KiteProvider(BankProvider):
             # Exchange and instrument_token are Kite-specific trading identifiers
             # and can change when the same security is represented on another exchange.
             if isin:
-                external_id = f"kite:{exchange}:{isin}"
+                external_id = f"kite:isin:{isin}"
             elif instrument_token:
                 # If ISIN is not available, use the exchange and instrument_token as a fallback.
                 external_id = (
@@ -370,8 +373,8 @@ class KiteProvider(BankProvider):
         return result
 
     async def get_asset_transactions(
-        self,
-        credentials: dict,
+    self,
+    credentials: dict,
     ) -> list[AssetTransactionData]:
         """Fetch today's executed CNC equity trades from Kite.
 
@@ -405,6 +408,7 @@ class KiteProvider(BankProvider):
             exchange = str(item.get("exchange") or "").upper()
             instrument_token = item.get("instrument_token")
             symbol = str(item.get("tradingsymbol") or "").strip()
+            isin = str(item.get("isin") or "").strip().upper()
 
             if not trade_id or not symbol:
                 continue
@@ -422,7 +426,12 @@ class KiteProvider(BankProvider):
                 continue
 
             # Must match the same external_id used by get_holdings().
-            if instrument_token:
+            #
+            # ISIN is the stable identity for the security, so prefer it over
+            # exchange/instrument_token.
+            if isin:
+                asset_external_id = f"kite:isin:{isin}"
+            elif instrument_token:
                 asset_external_id = (
                     f"kite:{exchange}:{instrument_token}"
                 )
@@ -475,6 +484,7 @@ class KiteProvider(BankProvider):
                         ),
                         "exchange": exchange,
                         "tradingsymbol": symbol,
+                        "isin": isin or None,
                         "instrument_token": instrument_token,
                         "product": item.get("product"),
                         "transaction_type": transaction_type,
