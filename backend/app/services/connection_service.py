@@ -1099,14 +1099,55 @@ async def handle_oauth_callback(
         existing_reconnect.institution_name = (
             connection_data.institution_name or existing_reconnect.institution_name
         )
-        existing_reconnect.logo_url = _clean_logo_url(connection_data.logo_url) or existing_reconnect.logo_url
+        existing_reconnect.logo_url = (
+            _clean_logo_url(connection_data.logo_url)
+            or existing_reconnect.logo_url
+        )
         existing_reconnect.credentials = connection_data.credentials
         existing_reconnect.status = "active"
+
         # Re-sync from current data on next sync cycle.
         existing_reconnect.last_sync_at = None
+
         await session.commit()
         await session.refresh(existing_reconnect)
         return existing_reconnect
+
+    # Prevent duplicate connections for providers whose external_id
+    # uniquely identifies the user's account.
+    existing_connection: BankConnection | None = None
+
+    if connection_data.external_id:
+        existing_connection = await session.scalar(
+            select(BankConnection)
+            .where(
+                BankConnection.workspace_id == workspace_id,
+                BankConnection.provider == provider_name,
+                BankConnection.external_id == connection_data.external_id,
+            )
+            .limit(1)
+        )
+
+    if existing_connection is not None:
+        # The user authenticated an account that is already connected.
+        # Refresh its credentials instead of creating another connection.
+        existing_connection.institution_name = (
+            connection_data.institution_name
+            or existing_connection.institution_name
+        )
+        existing_connection.logo_url = (
+            _clean_logo_url(connection_data.logo_url)
+            or existing_connection.logo_url
+        )
+        existing_connection.credentials = connection_data.credentials
+        existing_connection.status = "active"
+
+        # Re-sync from current provider data.
+        existing_connection.last_sync_at = None
+
+        await session.commit()
+        await session.refresh(existing_connection)
+        return existing_connection
 
     flow_params = dict(state_payload.get("flow_params") or {})
     flow_sync_assets = flow_params.pop("sync_assets", None)
