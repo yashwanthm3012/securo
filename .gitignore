@@ -10,6 +10,7 @@ CLAUDE.md
 docs/plans/
 tmp/
 docker-compose.override.yml
+backups/
 
 # Ignore local configuration files
 .vscode/
